@@ -6,6 +6,11 @@ import os
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from dotenv import load_dotenv
+
+ROOT_DIR = Path (__file__).resolve().parents[1]
+load_dotenv(ROOT_DIR / '.env')  # Đọc biến môi trường từ file .env
+
 from agent import run_agent
 from providers import Provider
 from scenarios import ScenarioTools

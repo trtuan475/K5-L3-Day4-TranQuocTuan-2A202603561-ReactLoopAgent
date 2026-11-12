@@ -62,6 +62,20 @@ class LoopTests(unittest.TestCase):
         result = run_agent('kiểm tra', fake, StatusTools())
         self.assertEqual(result['status'], 'completed')
         self.assertEqual(json.loads(fake.histories[1][-1]['content'])['error'], 'INVALID_ARGUMENTS')
+    def test_tool_errors_are_returned_to_model_as_observations(self):
+        cases = [
+            (StatusTools(), 'missing', '{}', 'UNKNOWN_TOOL'),
+            (StatusTools(), 'get_status', '{"provider":"invalid"}', 'ValueError'),
+            (StatusTools(fail=True), 'get_status', '{"provider":"github"}', 'TimeoutError'),
+        ]
+        for tools, name, arguments, expected_error in cases:
+            with self.subTest(error=expected_error):
+                fake = FakeProvider([tool_call('tool-1', name, arguments), final()])
+                result = run_agent('kiểm tra', fake, tools)
+                observation = json.loads(fake.histories[1][-1]['content'])
+                self.assertEqual(result['status'], 'completed')
+                self.assertEqual(observation['error'], expected_error)
+                self.assertEqual(result['trace'][1]['event'], 'tool')
     def test_max_steps(self):
         fake = FakeProvider([tool_call('a', 'get_status', '{"provider":"github"}')])
         self.assertEqual(run_agent('x', fake, StatusTools(), 1)['status'], 'max_steps')
@@ -92,6 +106,16 @@ class ProviderTests(unittest.TestCase):
         result = client.complete(messages, [])
         self.assertEqual(result['finish'], 'stop')
         self.assertEqual(len(post.call_args.args[2]['messages'][-1]['content']), 2)
+
+    def test_provider_failure_returns_error(self):
+        class FailedProvider:
+            def complete(self, messages, schemas):
+                raise RuntimeError('provider unavailable')
+
+        result = run_agent('kiểm tra', FailedProvider(), StatusTools())
+        self.assertEqual(result['status'], 'error')
+        self.assertIn('provider unavailable', result['error'])
+        self.assertEqual(result['trace'][0]['event'], 'error')
 
 if __name__ == '__main__':
     unittest.main()
